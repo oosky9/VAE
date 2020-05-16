@@ -44,10 +44,10 @@ def load_data(p, batch_size, patch_size):
 
     return train_loader, valid_loader, test_loader
 
-def loss(x, x_hat, mean, var):
+def loss(x, x_hat, mean, var, mse):
 
     KL = -0.5 * torch.mean(torch.sum(1 + torch.log(var) - mean**2 - var))
-    reconstruction = torch.abs(x - x_hat).mean()
+    reconstruction = mse(x, x_hat)
     elbo = KL + reconstruction
 
     return KL, reconstruction, elbo
@@ -65,6 +65,8 @@ def step_train(train_dataset, valid_dataset, device, epochs, z_dim, n_hidden, al
     ).to(device)
 
     optimizer = torch.optim.Adam(vae.parameters(), lr=alpha)
+
+    mse_loss = torch.nn.MSELoss(size_average=False)
 
     best_loss = 99999
 
@@ -85,10 +87,10 @@ def step_train(train_dataset, valid_dataset, device, epochs, z_dim, n_hidden, al
 
             mu, sig, _, x_hat = vae(input_img)
 
-            KLdiv, mse, ELBO = loss(input_img, x_hat, mu, sig)
+            KLdiv, mse, ELBO = loss(input_img, x_hat, mu, sig, mse_loss)
             
             train_KL.append(KLdiv.item())
-            train_mse.append(mse.item())
+            train_mse.append(mse.mean().item())
             train_elbo.append(ELBO.item())
 
             vae.zero_grad()
@@ -113,10 +115,10 @@ def step_train(train_dataset, valid_dataset, device, epochs, z_dim, n_hidden, al
                     input_img = input_img.to(device)
 
                     mu, sig, _, x_hat = vae(input_img)
-                    KLdiv, mse, ELBO = loss(input_img, x_hat, mu, sig)
+                    KLdiv, mse, ELBO = loss(input_img, x_hat, mu, sig, mse_loss)
 
                     valid_KL.append(KLdiv.item())
-                    valid_mse.append(mse.item())
+                    valid_mse.append(mse.mean().item())
                     valid_elbo.append(ELBO.item())
 
                 result["valid/KL"].append(statistics.mean(valid_KL))
@@ -209,9 +211,9 @@ def arg_parser():
     parser.add_argument('--epochs', type=int, default=1000)
     parser.add_argument('--z_dim', type=int, default=2)
     parser.add_argument('--n_hidden', type=int, default=200)
-    parser.add_argument('--patch_size', type=int, default=8)
-    parser.add_argument('--alpha', type=float, default=1e-5)
-    parser.add_argument('--batch_size', type=int, default=100)
+    parser.add_argument('--patch_size', type=int, default=32)
+    parser.add_argument('--alpha', type=float, default=1e-4)
+    parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--mode', type=str, default="train", help="[train, test]")
 
     args = parser.parse_args()
